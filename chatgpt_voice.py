@@ -20,6 +20,11 @@ YOUR_VOICE_PROFILE = "your_voice.wav"
 TEMP_AUDIO_PATH = "temp_audio.wav"
 SAMPLE_RATE = 16000
 DURATION = 5  # Recording duration in seconds
+# Constants
+CHANNELS = 1  # Mono audio
+FRAME_DURATION = 0.1  # Duration of each audio frame in seconds
+ENERGY_THRESHOLD = 500  # Threshold to detect voice activity
+MAX_SILENCE_FRAMES = 10  # Number of silent frames before stopping
 
 # Initialize Speaker Recognition model
 speaker_recognition = SpeakerRecognition.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb" )
@@ -34,6 +39,41 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+
+def record_audio_auto_detect(samplerate=SAMPLE_RATE, channels=CHANNELS, frame_duration=FRAME_DURATION):
+    frame_size = int(samplerate * frame_duration)  # Number of samples per frame
+    audio_buffer = []
+    silence_count = 0
+
+    print("Listening for voice...")
+
+    # Stream audio from the microphone
+    with sd.InputStream(samplerate=samplerate, channels=channels, dtype='int16') as stream:
+        while True:
+            # Read audio frame
+            audio = stream.read(frame_size)[0].flatten()
+
+            # Calculate the energy level (sum of squares)
+            energy = np.sum(audio.astype(np.int32) ** 2) / len(audio)
+
+            if energy > ENERGY_THRESHOLD:
+                # Voice detected; reset silence counter and store audio
+                silence_count = 0
+                audio_buffer.append(audio)
+                #print("Voice detected.")
+            else:
+                # Silence detected; increment silence counter
+                silence_count += 1
+                #print("Silence detected.")
+
+            # Stop recording if silence persists
+            if silence_count > MAX_SILENCE_FRAMES and audio_buffer:
+                #print("Recording finished.")
+                break
+
+    # Combine recorded frames into a single NumPy array
+    recorded_audio = np.concatenate(audio_buffer, axis=0)
+    return recorded_audio
 
 def record_audio(duration=DURATION, samplerate=SAMPLE_RATE):
     print("Recording...")
@@ -81,7 +121,7 @@ def transcribe_audio():
         while True:
             print("\nRecording... Speak now.")
 
-            audio = record_audio()
+            audio = record_audio_auto_detect()
             save_audio(audio, TEMP_AUDIO_PATH)
 
             result = model.transcribe(TEMP_AUDIO_PATH, language="en")
@@ -93,7 +133,7 @@ def transcribe_audio():
             similarity_score = verify_speaker(TEMP_AUDIO_PATH, YOUR_VOICE_PROFILE)
             print("similarity ")
             print(similarity_score)
-            if similarity_score > 0.7:
+            if similarity_score >= 0.65:
                 print(f"{bcolors.FAIL} your voice has been detected {bcolors.ENDC}")
                 continue 
 
