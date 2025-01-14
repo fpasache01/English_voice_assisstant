@@ -4,13 +4,26 @@ import sounddevice as sd
 import numpy as np
 from scipy.io.wavfile import write
 import openai
-import string
+from speechbrain.pretrained import SpeakerRecognition
+import keyboard
+import os.path
 
+# Set OpenAI API key
 api_key = "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"  # Replace with your actual API key
-openai.api_key = api_key
-chat_histories = {}
 
+openai.api_key = api_key
+
+# File paths and constants
 CHAT_HISTORY_FILE = "chat_history.json"
+CHAT_LOG = "chat_log.json"
+YOUR_VOICE_PROFILE = "your_voice.wav"
+TEMP_AUDIO_PATH = "temp_audio.wav"
+SAMPLE_RATE = 16000
+DURATION = 5  # Recording duration in seconds
+
+# Initialize Speaker Recognition model
+speaker_recognition = SpeakerRecognition.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb" )
+
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -22,83 +35,95 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
+def record_audio(duration=DURATION, samplerate=SAMPLE_RATE):
+    print("Recording...")
+    audio = sd.rec(int(samplerate * duration), samplerate=samplerate, channels=1, dtype=np.int16)
+    sd.wait()
+    return audio
+
+def save_audio(audio, filepath, samplerate=SAMPLE_RATE):
+    write(filepath, samplerate, audio)
+
+def verify_speaker(audio_path, reference_path):
+    score, _ = speaker_recognition.verify_files(audio_path, reference_path)
+    return score
+
 def save_chat_history(chat_history, file_path):
-    """Save chat history to a file."""
     with open(file_path, "w") as file:
         json.dump(chat_history, file, indent=4)
 
 def load_chat_history(file_path):
-    """Load chat history from a file."""
     try:
         with open(file_path, "r") as file:
             return json.load(file)
     except FileNotFoundError:
         return [{"role": "system", "content": "You are a helpful assistant."}]
-    
-def chat_with_gpt(chat_history,prompt):
 
+def chat_with_gpt(chat_history, prompt):
     chat_history.append({"role": "user", "content": prompt})
 
     try:
-        chat_completion = openai.chat.completions.create(
-                messages=chat_history,
-                model="gpt-4o",
-        )           
-        chat_history.append({"role": "assistant", "content": chat_completion.choices[0].message.content})
-        return chat_completion.choices[0].message.content
-    
+        chat_completion = openai.chat.completions.create( messages=chat_history, model="gpt-4o" )
+        #print(completion.choices[0].message)
+        assistant_message = chat_completion.choices[0].message.content
+        chat_history.append({"role": "assistant", "content": assistant_message})
+        return assistant_message
     except Exception as e:
         return f"An error occurred: {e}"
 
 def transcribe_audio():
-    """Capture real-time audio from the microphone and transcribe it using Whisper."""
-    model = whisper.load_model("tiny")  # Load Whisper model
-    samplerate = 16000  # Whisper requires 16 kHz audio
-    print("Listening... Speak naturally.")
+    model = whisper.load_model("tiny")
     chat_history = load_chat_history(CHAT_HISTORY_FILE)
+    #chat_log = load_chat_history(CHAT_LOG)
 
+    print("Listening... Speak naturally.")
     try:
         while True:
             print("\nRecording... Speak now.")
 
-            # Record audio for a short duration
-            duration = 5  # Seconds
-            audio = sd.rec(int(samplerate * duration), samplerate=samplerate, channels=1, dtype=np.int16)
-            sd.wait()  # Wait until recording is finished
-            
-            # Save audio to a temporary file
-            temp_audio_path = "temp_audio.wav"
-            write(temp_audio_path, samplerate, audio)
+            audio = record_audio()
+            save_audio(audio, TEMP_AUDIO_PATH)
 
-            # Transcribe with Whisper
-            result = model.transcribe(temp_audio_path, language="en")
+            result = model.transcribe(TEMP_AUDIO_PATH, language="en")
             text = result["text"]
-            print(text)
-            if(text != ""):
-                print(f"{bcolors.WARNING} Transcription: {text} , {bcolors.ENDC}")
-                response = chat_with_gpt(chat_history, text)
-                save_chat_history(chat_history, CHAT_HISTORY_FILE)
-                print(f"{bcolors.OKGREEN} gpt suggestion: {response} , {bcolors.ENDC}")
-        
+           
+            if text == "":              
+                continue  
+
+            similarity_score = verify_speaker(TEMP_AUDIO_PATH, YOUR_VOICE_PROFILE)
+            print("similarity ")
+            print(similarity_score)
+            if similarity_score > 0.7:
+                print(f"{bcolors.FAIL} your voice has been detected {bcolors.ENDC}")
+                continue 
+
+            print(f"{bcolors.OKCYAN}Transcription: {text}{bcolors.ENDC}")
+            #response = chat_with_gpt(chat_history, f"(in summary tell me) {text}")
+            #print(f"{bcolors.OKGREEN}GPT Suggestion: {response}{bcolors.ENDC}")
+
     except KeyboardInterrupt:
         print("\nProgram stopped.")
     except Exception as e:
         print(f"An error occurred: {e}")
 
-# Example usage
-if __name__ == "__main__":    
-    #chat_history = load_chat_history(CHAT_HISTORY_FILE)
-    #print("Welcome to ChatGPT! Type 'exit' to quit.")
+def main():
+    check_file = os.path.isfile(YOUR_VOICE_PROFILE)
+    if(check_file):
+        print("voice profile detected")
+    else:
+        print("Press any key to start voice detection...")
+        keyboard.read_event()  # Waits for any key press
+        print("Speak something for five seconds...")
+        # Record and save your voice
+        audio = record_audio(duration=10)  
+        save_audio(audio, YOUR_VOICE_PROFILE)
+        print("Your voice profile is saved.")
 
-    #while True:
-    #    user_input = input("You: ")
-    #    if user_input.lower() == "exit":
-    #        print("Saving chat history and exiting...")      
-    #        print("Chat history saved.")
-    #        break
+    # Countdown before starting transcription
+    for i in range(5, 0, -1):
+        print(i)
 
-        # Chat with GPT and get a response
-    #    response = chat_with_gpt(chat_history, user_input)
-    #    save_chat_history(chat_history, CHAT_HISTORY_FILE)
-    #    print(f"ChatGPT: {response}")
     transcribe_audio()
+
+if __name__ == "__main__":
+    main()
