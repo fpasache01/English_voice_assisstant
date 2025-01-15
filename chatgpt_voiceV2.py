@@ -2,6 +2,7 @@ import json
 import os
 import numpy as np
 import openai
+import requests
 import sounddevice as sd
 from scipy.io.wavfile import write
 import time
@@ -33,6 +34,35 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+
+# Example API endpoint
+API_ENDPOINT = "http://127.0.0.1:8000/transcriptions/"
+
+def send_transcription_to_api(filename, transcription, response):
+    """
+    Sends the transcription to the API.
+
+    Args:
+        filename (str): The name of the audio file.
+        transcription (str): The transcription text.
+
+    Returns:
+        dict: Response from the API.
+    """
+    try:
+        payload = {
+            "filename": filename,
+            "transcription": transcription,
+            "response": response
+        }
+
+# Make the POST request
+        response = requests.post(API_ENDPOINT, json=payload)
+
+        return response.json()
+    except requests.exceptions.RequestException as e:
+            print(f"Failed to send transcription to API: {e}")
+            return None
 
 def record_audio(duration, samplerate, channels=1):
     """
@@ -90,7 +120,8 @@ def load_chat_history(file_path):
     except FileNotFoundError:
         return [{"role": "system", "content": "You are a helpful assistant."}]
 
-def chat_with_gpt(chat_history, prompt):
+def chat_with_gpt( prompt):
+    chat_history = load_chat_history(CHAT_HISTORY_FILE)
     chat_history.append({"role": "user", "content": prompt})
 
     try:
@@ -214,6 +245,8 @@ def transcribe_audio():
 
             if transcription:
                 print(f"Transcription: {transcription}")
+                response = chat_with_gpt( f"(in summary tell me): {transcription}")              
+                send_transcription_to_api(audio_file_path,transcription, response)
             else:
                 print("No transcription detected.")
 
