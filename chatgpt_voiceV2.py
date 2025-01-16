@@ -239,7 +239,7 @@ def transcribe_audio():
                 print(f"Audio file {audio_file_path} does not exist. Skipping...")
                 continue
 
-            if verify_speaker(audio_file_path,PROFILE_FILE) > 0.7:
+            if verify_speaker(audio_file_path,PROFILE_FILE) > 0.6:
                 print(f"{bcolors.FAIL} your voice has been detected {bcolors.ENDC}")
                 continue
             print(f"{bcolors.OKCYAN} the voice is of another person {bcolors.ENDC}")
