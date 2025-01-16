@@ -71,6 +71,45 @@ async def read_transcriptions(request: Request):
     Renders the main page for viewing transcriptions.
     """
     return templates.TemplateResponse("transcriptions.html", {"request": request})
+@app.get("/transcriptions/last/")
+def get_last_transcription():
+    """
+    Fetch the most recent transcription.
+    """
+    db = SessionLocal()
+    try:
+        last_transcription = db.query(TranscriptionDB).order_by(TranscriptionDB.id.desc()).first()
+        if last_transcription:
+            return {
+                "id": last_transcription.id,
+                "filename": last_transcription.filename,
+                "transcription": last_transcription.transcription,
+                "response": last_transcription.response,
+            }
+        else:
+            return {"message": "No transcriptions found"}
+    finally:
+        db.close()
+
+@app.get("/transcriptions/all/")
+def get_all_transcriptions_ordered():
+    """
+    Fetch all transcriptions ordered by descending ID.
+    """
+    db = SessionLocal()
+    try:
+        transcriptions = db.query(TranscriptionDB).order_by(TranscriptionDB.id.desc()).all()
+        return [
+            {
+                "id": t.id,
+                "filename": t.filename,
+                "transcription": t.transcription,
+                "response": t.response,
+            }
+            for t in transcriptions
+        ]
+    finally:
+        db.close()
 
 @app.post("/transcriptions/")
 async def create_transcription(data: TranscriptionInput):

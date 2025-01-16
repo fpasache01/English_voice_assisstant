@@ -56,85 +56,95 @@
         <p id="noMessages" style="text-align: center; color: #888;">Loading messages...</p>
     </div>
 
+  
     <script>
         const chatContainer = document.getElementById("chatContainer");
         const noMessages = document.getElementById("noMessages");
         let lastMessageId = 0; // Track the ID of the last message added
-
-        // Function to add a message to the chat container
-        const addMessage = (data) => {
+    
+        // Function to add a message to the top of the chat container
+        const addMessageToTop = (data) => {
+            // Check if the message already exists in the chat container
+            if (document.getElementById(`message-${data.id}`)) {
+                return; // Do not add duplicate messages
+            }
+    
             // Remove "No messages" placeholder if it exists
             if (noMessages) {
                 noMessages.remove();
             }
-
+    
             // Create a new message bubble
             const message = document.createElement("div");
             message.classList.add("message", "received");
-
+            message.id = `message-${data.id}`; // Set a unique ID for the message
+    
             // Add filename
             const filename = document.createElement("div");
             filename.classList.add("filename");
             filename.textContent = `File: ${data.filename}`;
             message.appendChild(filename);
-
+    
             // Add transcription text
             const transcription = document.createElement("div");
             transcription.classList.add("transcription");
             transcription.textContent = `Transcription: ${data.transcription}`;
             message.appendChild(transcription);
-
+    
             // Add response text
             const response = document.createElement("div");
             response.classList.add("response");
             response.textContent = `Response: ${data.response}`;
             message.appendChild(response);
-
-            // Append the message to the chat container
-            chatContainer.appendChild(message);
-
-            // Scroll to the bottom of the chat container
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+            // Prepend the message to the top of the chat container
+            chatContainer.insertBefore(message, chatContainer.firstChild);
+    
+            // Update the lastMessageId
+            lastMessageId = Math.max(lastMessageId, data.id);
         };
-
-        // Function to fetch the latest message
-        const fetchLatestMessage = () => {
-            fetch("http://127.0.0.1:8000/transcriptions/")
+    
+        // Function to fetch all messages on initial load
+        const fetchAllMessages = () => {
+            fetch("http://127.0.0.1:8000/transcriptions/all/")
                 .then(response => response.json())
                 .then(data => {
-                    // Find the last message in the response
-                    const lastMessage = data[data.length - 1];
-                    if (lastMessage && lastMessage.id > lastMessageId) {
-                        // Add the latest message if it doesn't already exist
-                        addMessage(lastMessage);
-                        lastMessageId = lastMessage.id;
+                    if (data.length === 0) {
+                        noMessages.textContent = "No messages yet...";
+                    } else {
+                        data.forEach(message => {
+                            addMessageToTop(message); // Add messages in descending order
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error("Error fetching messages:", error);
+                    noMessages.textContent = "Failed to load messages.";
+                });
+        };
+    
+        // Function to fetch the latest message every 5 seconds
+        const fetchLatestMessage = () => {
+            fetch("http://127.0.0.1:8000/transcriptions/last/")
+                .then(response => response.json())
+                .then(data => {
+                    if (data.id > lastMessageId) {
+                        addMessageToTop(data); // Add new message to the top
                     }
                 })
                 .catch(error => {
                     console.error("Error fetching latest message:", error);
                 });
         };
-
-        // Fetch existing messages on page load
-        fetch("http://127.0.0.1:8000/transcriptions/")
-            .then(response => response.json())
-            .then(data => {
-                if (data.length === 0) {
-                    noMessages.textContent = "No messages yet...";
-                } else {
-                    data.forEach(message => {
-                        addMessage(message);
-                        lastMessageId = Math.max(lastMessageId, message.id);
-                    });
-                }
-            })
-            .catch(error => {
-                console.error("Error fetching messages:", error);
-                noMessages.textContent = "Failed to load messages.";
-            });
-
+    
+        // Fetch all messages on page load
+        fetchAllMessages();
+    
         // Poll the server every 5 seconds for new messages
         setInterval(fetchLatestMessage, 5000);
     </script>
+    
+
+    
 </body>
 </html>
