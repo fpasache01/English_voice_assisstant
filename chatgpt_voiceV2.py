@@ -204,6 +204,8 @@ def preprocess_audio(file_path):
 
 def verify_speaker(audio_path, reference_path):
     score, _ = speaker_recognition.verify_files(audio_path, reference_path)
+
+    print(f"{bcolors.FAIL} score speaker: {score} {bcolors.ENDC}")
     return score
 
 def exists_speaker_on_audio(temp_audio_path, your_voice_path, threshold=0.75):
@@ -219,7 +221,10 @@ def exists_speaker_on_audio(temp_audio_path, your_voice_path, threshold=0.75):
     else:
         print("Speaker Not Verified.")
         return False
-      
+def verify_speaker(audio_path, reference_path):
+    score, _ = speaker_recognition.verify_files(audio_path, reference_path)
+    return score  
+   
 def transcribe_audio():
     """
     Continuously detects sound, transcribes detected audio, and deletes files after transcription.
@@ -234,10 +239,10 @@ def transcribe_audio():
                 print(f"Audio file {audio_file_path} does not exist. Skipping...")
                 continue
 
-            #if exists_speaker_on_audio(audio_file_path,PROFILE_FILE):
-            #    print("your voice has been detected , Skipping transcription ...")
-            #    continue
-
+            if verify_speaker(audio_file_path,PROFILE_FILE) > 0.7:
+                print(f"{bcolors.FAIL} your voice has been detected {bcolors.ENDC}")
+                continue
+            print(f"{bcolors.OKCYAN} the voice is of another person {bcolors.ENDC}")
             # Transcribe the audio file
             print(f"Transcribing {audio_file_path}...")
             result = model.transcribe(audio_file_path, language="en")
